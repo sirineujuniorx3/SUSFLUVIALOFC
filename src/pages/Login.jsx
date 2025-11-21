@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -81,6 +80,21 @@ const Login = () => {
       );
 
       if (foundUser) {
+        // Save currentUser in localStorage so other modules (doctor schedule, etc.) know who's logged
+        try {
+          const userId = foundUser.id || foundUser.patientId || String(foundUser.name).toLowerCase();
+          const currentUser = {
+            id: userId,
+            role: foundUser.role,
+            name: foundUser.name,
+            photo: foundUser.photo || ''
+          };
+          localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        } catch (err) {
+          console.warn("Could not write currentUser to localStorage", err);
+        }
+
+        // Keep existing auth flow
         login({ name: foundUser.name, role: foundUser.role, photo: foundUser.photo, patientId: foundUser.patientId });
         setIsLoading(false);
         navigate('/');
