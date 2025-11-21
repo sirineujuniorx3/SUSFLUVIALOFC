@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -44,34 +43,54 @@ export const DataSyncProvider = ({ children }) => {
     }
   };
 
+  /**
+   * saveData
+   * - Accepts a single object or an array of objects.
+   * - Performs an upsert (merge) for existing items (by id) instead of replacing them.
+   * - Preserves fields that are not provided by the caller (e.g. date) to avoid accidental loss.
+   */
   const saveData = (table, data) => {
     try {
       const existingDataStr = safeLocalStorage.getItem(table);
       const existingData = existingDataStr ? JSON.parse(existingDataStr) : [];
       const dataArray = Array.isArray(data) ? data : [data];
-      
-      let updatedData = [...existingData];
-      
+
+      let updatedData = Array.isArray(existingData) ? [...existingData] : [];
+
       dataArray.forEach(item => {
+        if (!item || !item.id) {
+          // Defensive: warn and skip items without id (caller should provide id)
+          console.warn(`[DataSync] saveData called with item missing id for table "${table}"`, item);
+          return;
+        }
+
         const existingIndex = updatedData.findIndex(existing => existing.id === item.id);
+
         if (existingIndex > -1) {
-          updatedData[existingIndex] = item;
+          // MERGE instead of replace: preserve fields that aren't provided by `item`
+          updatedData[existingIndex] = { ...updatedData[existingIndex], ...item };
         } else {
+          // New item: push as-is
           updatedData.push(item);
         }
       });
-      
+
       const success = safeLocalStorage.setItem(table, JSON.stringify(updatedData));
       if (!success) {
-          throw new Error("Storage quota exceeded or access denied.");
+        throw new Error("Storage quota exceeded or access denied.");
       }
+
+      // Dispatch a storage event so other tabs/components listening update.
+      // Note: Real storage events aren't fired in same tab by setItem, so dispatch a custom event.
+      try { window.dispatchEvent(new Event('storage')); } catch (e) { /* ignore */ }
+
       return Promise.resolve();
     } catch (error) {
       console.error('Error saving data:', error);
-      toast({ 
-        variant: 'destructive', 
-        title: '❌ Erro ao Salvar', 
-        description: 'Não foi possível salvar os dados localmente.' 
+      toast({
+        variant: 'destructive',
+        title: '❌ Erro ao Salvar',
+        description: 'Não foi possível salvar os dados localmente.'
       });
       return Promise.reject(error);
     }
@@ -82,18 +101,21 @@ export const DataSyncProvider = ({ children }) => {
       const existingDataStr = safeLocalStorage.getItem(table);
       const existingData = existingDataStr ? JSON.parse(existingDataStr) : [];
       const updatedData = existingData.filter(item => item.id !== id);
-      
+
       const success = safeLocalStorage.setItem(table, JSON.stringify(updatedData));
       if (!success) {
           throw new Error("Storage write failed during deletion.");
       }
+
+      try { window.dispatchEvent(new Event('storage')); } catch (e) { /* ignore */ }
+
       return Promise.resolve();
     } catch (error) {
       console.error('Error deleting data:', error);
-      toast({ 
-        variant: 'destructive', 
-        title: '❌ Erro ao Excluir', 
-        description: 'Não foi possível excluir os dados.' 
+      toast({
+        variant: 'destructive',
+        title: '❌ Erro ao Excluir',
+        description: 'Não foi possível excluir os dados.'
       });
       return Promise.reject(error);
     }
@@ -101,18 +123,16 @@ export const DataSyncProvider = ({ children }) => {
 
   const getData = (table, filters = {}) => {
     try {
-      // Note: In a real API scenario, this is where we would handle 401s or CORS.
-      // Since we use localStorage, we simulate a successful response.
       const dataStr = safeLocalStorage.getItem(table);
       let data = dataStr ? JSON.parse(dataStr) : [];
-      
+
       // Apply filters if provided
       if (Object.keys(filters).length > 0) {
         data = data.filter(item => {
           return Object.entries(filters).every(([key, value]) => item[key] === value);
         });
       }
-      
+
       return Promise.resolve(data);
     } catch (error) {
       console.error('Error getting data:', error);
