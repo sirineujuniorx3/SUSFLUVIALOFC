@@ -258,29 +258,47 @@ const DoctorDailyScheduleContent = () => {
             const patients = getLocalData('patients');
             setAllPatients(patients || []);
 
-            const todayStr = getTodayDate(); // uses same format as records, assumed by compareDates
-            // console.log(`[DoctorSchedule] Filtering for TODAY: ${todayStr}`);
-            
+            // HOJE corrigido
+            const todayStr = new Date().toISOString().split("T")[0];
+
+            const allowedStatuses = [
+                'Agendado',
+                'Aguardando Atendimento',
+                'Aguardando Médico',
+                'Em Atendimento'
+            ];
+
             const todayAppointments = (allAppointments || [])
                 .filter(apt => {
-                    if (!apt.date) return false;
-                    
-                    const isToday = compareDates(apt.date, todayStr);
-                    // show appointments for this local "user" (doctor) OR if role administrador show all
-                    const isMyPatient = (user.role === 'administrador') || (apt.doctor_id === user.id) || !apt.doctor_id;
-                    
-                    const allowedStatuses = ['Agendado', 'Aguardando Atendimento', 'Aguardando Médico', 'Em Atendimento'];
+                    if (!apt?.date) return false;
+
+                    // Pega só "YYYY-MM-DD" do agendamento
+                    const aptDateOnly = apt.date.split("T")[0];
+
+                    // Verifica se é a data de hoje
+                    const isToday = aptDateOnly === todayStr;
+
+                    // Verifica se pertence ao médico ou admin
+                    const isMyPatient =
+                        user.role === 'administrador' ||
+                        apt.doctor_id === user.id ||
+                        !apt.doctor_id;
+
                     const hasAllowedStatus = allowedStatuses.includes(apt.status);
-                    
+
                     return isToday && isMyPatient && hasAllowedStatus;
                 })
                 .sort((a, b) => new Date(a.date) - new Date(b.date));
-            
+
             setDailyAppointments(todayAppointments);
         } catch (error) {
             console.error("Error fetching daily schedule:", error);
             setError("Não foi possível carregar a agenda. Verifique se há dados salvos.");
-            toast({ variant: "destructive", title: "Erro de Carregamento", description: "Falha ao carregar a agenda médica." });
+            toast({
+                variant: "destructive",
+                title: "Erro de Carregamento",
+                description: "Falha ao carregar a agenda médica."
+            });
         } finally {
             setIsLoading(false);
         }
